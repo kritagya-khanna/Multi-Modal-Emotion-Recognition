@@ -827,12 +827,8 @@ def process_video_dataset(video_dir, output_dir, sample_rate=5, max_videos=None,
 
 
 if __name__ == "__main__":
-    from data_setup import DATA_PATH, PROCESSED_PATH
+    from data_setup import VIDEO_SONG_PATH, VIDEO_SPEECH_PATH, PROCESSED_PATH
     import time
-
-    # Check if data directories exist
-    VIDEO_SPEECH_PATH = DATA_PATH / "Video_Speech_Actors_01-24"
-    VIDEO_SONG_PATH = DATA_PATH / "Video_Song_Actors_01-24"
     
     if not VIDEO_SPEECH_PATH.exists():
         print(f"Warning: Speech video directory not found at {VIDEO_SPEECH_PATH}")
