@@ -17,3 +17,4 @@ pydot>=1.4.2
 graphviz>=0.16
 tensorboard>=2.5.0
 pyyaml>=5.4.0
+dlib>=19.22.0requirements.txt
