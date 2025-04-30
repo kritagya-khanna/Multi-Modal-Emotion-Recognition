@@ -66,4 +66,5 @@ processed/audio_features/*/visualization/
 logs/
 *.log
 
+filestruct.txt
 # Specific to your project - add any other large files or sensitive data
