@@ -26,6 +26,7 @@ from models.audio.cnn_lstm import build_cnn_lstm_attention
 from utils.data_generator import AudioDataGenerator
 from utils.spectrogram_generator import load_and_prepare_data
 from utils.metrics import calculate_metrics, plot_confusion_matrix, plot_metrics, print_classification_report
+from sklearn.utils.class_weight import compute_class_weight
 
 def train_audio_model(config_path):
     """
@@ -80,6 +81,15 @@ def train_audio_model(config_path):
         batch_size=config['training']['batch_size'],
         shuffle=False
     )
+
+    # Calculate class weights to handle imbalance
+    class_weights = compute_class_weight(
+        'balanced',
+        classes=np.unique(y_train),
+        y=y_train
+    )
+    class_weight_dict = dict(enumerate(class_weights))
+    print(f"\nClass weights: {class_weight_dict}")
     
     # Create model
     print("\n=== Building model ===")
@@ -144,6 +154,7 @@ def train_audio_model(config_path):
         epochs=config['training']['epochs'],
         validation_data=val_generator,
         callbacks=callbacks,
+        class_weight=class_weight_dict,
         verbose=1
     )
     
@@ -163,6 +174,30 @@ def train_audio_model(config_path):
     # Evaluate on test set
     print("\n=== Evaluating model on test set ===")
     evaluate_model(model, X_test, y_test, label_mapping, experiment_dir)
+    
+    # Analyze predictions to check if model is stuck
+    print("\n=== Analyzing predictions ===")
+    y_pred_proba = model.predict(X_test)
+    y_pred = np.argmax(y_pred_proba, axis=1)
+    
+    # Check prediction distribution
+    unique, counts = np.unique(y_pred, return_counts=True)
+    print("\nPrediction distribution on test set:")
+    for emotion_idx, count in zip(unique, counts):
+        emotion_name = label_mapping[emotion_idx]
+        print(f"  {emotion_name}: {count} ({count/len(y_pred)*100:.1f}%)")
+    
+    # Check if it's predicting mostly one class
+    if max(counts) > len(y_pred) * 0.5:
+        print(f"\n⚠️  WARNING: Model is predicting mostly ONE class!")
+        print(f"   Predicted '{label_mapping[unique[np.argmax(counts)]]}' for {max(counts)/len(y_pred)*100:.1f}% of samples")
+    
+    # Check actual distribution
+    unique_true, counts_true = np.unique(y_test, return_counts=True)
+    print("\nActual distribution on test set:")
+    for emotion_idx, count in zip(unique_true, counts_true):
+        emotion_name = label_mapping[emotion_idx]
+        print(f"  {emotion_name}: {count} ({count/len(y_test)*100:.1f}%)")
     
     return model, history, experiment_dir
 

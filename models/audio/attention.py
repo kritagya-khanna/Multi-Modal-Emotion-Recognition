@@ -5,7 +5,7 @@ import numpy as np
 class SelfAttention(layers.Layer):
     """Self-attention mechanism for sequence data"""
     
-    def __init__(self, attention_units=64, return_sequences=False):
+    def __init__(self, attention_units=64, return_sequences=False, **kwargs):
         """
         Initialize self-attention layer
         
@@ -13,7 +13,7 @@ class SelfAttention(layers.Layer):
             attention_units: Number of attention units
             return_sequences: Whether to return the full sequence or just the attended features
         """
-        super(SelfAttention, self).__init__()
+        super(SelfAttention, self).__init__(**kwargs)
         self.attention_units = attention_units
         self.return_sequences = return_sequences
     

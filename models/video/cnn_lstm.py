@@ -65,7 +65,7 @@ def build_video_cnn_lstm_attention(config):
         )(x)
     
     # Reshape for LSTM: (batch, time_steps, features)
-    shape = x.get_shape().as_list()
+    shape = x.shape
     x = layers.Reshape(
         (shape[1], shape[2] * shape[3]),
         name='reshape_for_lstm'

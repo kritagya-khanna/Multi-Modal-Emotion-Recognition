@@ -9,110 +9,42 @@ from models.audio.attention import SelfAttention, BahdanauAttention
 
 def build_cnn_lstm_attention(config):
     """
-    Build CNN-LSTM model with attention for audio emotion recognition
-    
-    Args:
-        config: Configuration dictionary
-    
-    Returns:
-        Compiled model
+    Very simple CNN for small datasets
+    Only ~200K parameters instead of 5M
     """
-    # Get parameters from config
     input_shape = tuple(config['model']['input_shape'])
-    cnn_filters = config['model']['cnn_filters']
-    kernel_size = config['model']['cnn_kernel_size']
-    pool_size = config['model']['cnn_pool_size']
-    lstm_units = config['model']['lstm_units']
-    lstm_layers = config['model']['lstm_layers']
-    dense_units = config['model']['dense_units']
-    dropout_rate = config['model']['dropout_rate']
-    attention_units = config['model']['attention_units']
     num_classes = config['model']['num_classes']
     
-    # Input layer
     inputs = layers.Input(shape=input_shape)
     
-    # CNN layers
-    x = inputs
-    for i, filters in enumerate(cnn_filters):
-        # Conv2D + BatchNorm + ReLU
-        x = layers.Conv2D(
-            filters=filters,
-            kernel_size=kernel_size,
-            padding='same',
-            kernel_regularizer=regularizers.l2(1e-5),
-            name=f'conv2d_{i+1}'
-        )(x)
-        x = layers.BatchNormalization(name=f'bn_{i+1}')(x)
-        x = layers.Activation('relu', name=f'relu_{i+1}')(x)
-        
-        # Apply pooling to reduce dimensions except in the last layer
-        # to preserve temporal information for LSTM
-        if i < len(cnn_filters) - 1:
-            x = layers.MaxPooling2D(
-                pool_size=pool_size,
-                name=f'pool_{i+1}'
-            )(x)
-        
-        # Add dropout with increasing rate for deeper layers
-        dropout_factor = (i + 1) / len(cnn_filters)
-        x = layers.Dropout(
-            rate=dropout_rate * dropout_factor,
-            name=f'dropout_{i+1}'
-        )(x)
+    # Simple CNN - only 3 layers
+    x = layers.Conv2D(32, 3, padding='same')(inputs)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    x = layers.MaxPooling2D(2)(x)
+    x = layers.Dropout(0.25)(x)
     
-    # Reshape for LSTM (preserve time dimension)
-    # Assuming input is (batch, time, frequency, channel)
-    # Need to reshape to (batch, time, frequency * channel)
-    shape = x.get_shape().as_list()
-    x = layers.Reshape(
-        (shape[1], shape[2] * shape[3]),
-        name='reshape_for_lstm'
-    )(x)
+    x = layers.Conv2D(64, 3, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    x = layers.MaxPooling2D(2)(x)
+    x = layers.Dropout(0.25)(x)
     
-    # Bidirectional LSTM layers
-    for i in range(lstm_layers):
-        return_sequences = True  # Always return sequences for attention
-        x = layers.Bidirectional(
-            layers.LSTM(
-                units=lstm_units,
-                return_sequences=return_sequences,
-                dropout=0.3,
-                recurrent_dropout=0.3,
-                kernel_regularizer=regularizers.l2(1e-5),
-                name=f'lstm_{i+1}'
-            ),
-            name=f'bidirectional_{i+1}'
-        )(x)
+    x = layers.Conv2D(128, 3, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    x = layers.GlobalAveragePooling2D()(x)
+    x = layers.Dropout(0.4)(x)
     
-    # Self-attention mechanism
-    x = SelfAttention(
-        attention_units=attention_units,
-        return_sequences=False,
-        name='self_attention'
-    )(x)
+    # Simple dense layers
+    x = layers.Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0.001))(x)
+    x = layers.Dropout(0.5)(x)
+    x = layers.Dense(128, activation='relu', kernel_regularizer=regularizers.l2(0.001))(x)
+    x = layers.Dropout(0.5)(x)
     
-    # Dense layers
-    for i, units in enumerate(dense_units):
-        x = layers.Dense(
-            units=units,
-            activation='relu',
-            kernel_regularizer=regularizers.l2(1e-5),
-            name=f'dense_{i+1}'
-        )(x)
-        x = layers.BatchNormalization(name=f'dense_bn_{i+1}')(x)
-        x = layers.Dropout(rate=dropout_rate, name=f'dense_dropout_{i+1}')(x)
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
     
-    # Output layer
-    outputs = layers.Dense(
-        units=num_classes,
-        activation='softmax',
-        name='output'
-    )(x)
-    
-    # Create model
-    model = models.Model(inputs=inputs, outputs=outputs, name='cnn_lstm_attention')
-    
+    model = models.Model(inputs=inputs, outputs=outputs, name='simple_cnn')
     return model
 
 

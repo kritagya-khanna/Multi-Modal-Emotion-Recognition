@@ -42,7 +42,11 @@ def generate_spectrograms_from_features(features_df, label_column='emotion', dro
 
     if drop_columns is None:
         # Default columns to drop - metadata and label columns
-        drop_columns = ['emotion', 'actor_id', 'gender', 'intensity', 'filename']
+        drop_columns = [
+            'emotion', 'actor', 'actor_id', 'gender', 'intensity', 
+            'filename', 'file_path', 'modality', 'voice_channel', 
+            'statement', 'repetition'
+        ]
     
     # Remove columns that don't exist in the DataFrame
     drop_columns = [col for col in drop_columns if col in features_df.columns]
@@ -71,7 +75,7 @@ def generate_spectrograms_from_features(features_df, label_column='emotion', dro
 
 def load_and_prepare_data(config):
     """
-    Load audio features and convert to spectrograms
+    Load real mel-spectrograms and prepare for training
     
     Args:
         config: Configuration dictionary
@@ -79,37 +83,48 @@ def load_and_prepare_data(config):
     Returns:
         X_train, X_val, X_test: Training, validation, and test spectrograms
         y_train, y_val, y_test: Training, validation, and test labels
+        label_mapping: Dictionary mapping label indices to names
     """
     from sklearn.model_selection import train_test_split
     from sklearn.preprocessing import LabelEncoder
     
-    # Load speech features
-    speech_path = Path(config['data']['speech_features_path'])
-    speech_df = pd.read_csv(speech_path)
+    print("Loading real mel-spectrograms...")
     
-    # Optionally load song features
+    # Load speech spectrograms
+    speech_spec_path = Path("processed/audio_spectrograms/speech")
+    X_speech = np.load(speech_spec_path / "spectrograms.npy")
+    y_speech = np.load(speech_spec_path / "labels.npy")
+    
+    print(f"Loaded speech spectrograms: {X_speech.shape}")
+    
+    # Optionally load song spectrograms
     if config['data']['use_song_data']:
-        song_path = Path(config['data']['song_features_path'])
-        if song_path.exists():
-            song_df = pd.read_csv(song_path)
-            # Combine speech and song features
-            features_df = pd.concat([speech_df, song_df], ignore_index=True)
+        song_spec_path = Path("processed/audio_spectrograms/song")
+        if song_spec_path.exists() and (song_spec_path / "spectrograms.npy").exists():
+            X_song = np.load(song_spec_path / "spectrograms.npy")
+            y_song = np.load(song_spec_path / "labels.npy")
+            print(f"Loaded song spectrograms: {X_song.shape}")
+            
+            # Combine speech and song
+            X = np.concatenate([X_speech, X_song], axis=0)
+            y = np.concatenate([y_speech, y_song], axis=0)
+            print(f"Combined spectrograms: {X.shape}")
         else:
-            print(f"Warning: Song features not found at {song_path}. Using only speech features.")
-            features_df = speech_df
+            print(f"Warning: Song spectrograms not found. Using only speech spectrograms.")
+            X = X_speech
+            y = y_speech
     else:
-        features_df = speech_df
-
-    # Convert features to spectrograms
-    X, y = generate_spectrograms_from_features(features_df, config=config)
+        X = X_speech
+        y = y_speech
     
     # Encode labels
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
     
-    # Save label mapping for later use
-    label_mapping = dict(zip(le.classes_, range(len(le.classes_))))
+    # Create label mapping (index -> emotion name)
+    label_mapping = dict(zip(range(len(le.classes_)), le.classes_))
     print(f"Label mapping: {label_mapping}")
+    print(f"Class distribution: {dict(zip(*np.unique(y_encoded, return_counts=True)))}")
     
     # Split into train, validation, and test sets
     test_size = config['data']['test_size']
@@ -125,7 +140,6 @@ def load_and_prepare_data(config):
     )
     
     # Then split remaining data into train and validation
-    # Adjust validation size to be proportion of train_val, not of total
     val_adjusted = val_size / (1 - test_size)
     X_train, X_val, y_train, y_val = train_test_split(
         X_train_val, y_train_val, 
@@ -134,10 +148,11 @@ def load_and_prepare_data(config):
         stratify=y_train_val
     )
     
-    print(f"Training set shape: {X_train.shape}, {len(np.unique(y_train))} classes")
-    print(f"Validation set shape: {X_val.shape}, {len(np.unique(y_val))} classes")
-    print(f"Test set shape: {X_test.shape}, {len(np.unique(y_test))} classes")
-
+    print(f"\nData split:")
+    print(f"  Training set: {X_train.shape}, {len(np.unique(y_train))} classes")
+    print(f"  Validation set: {X_val.shape}, {len(np.unique(y_val))} classes")
+    print(f"  Test set: {X_test.shape}, {len(np.unique(y_test))} classes")
+    
     return X_train, X_val, X_test, y_train, y_val, y_test, label_mapping
 
 if __name__ == "__main__":

@@ -417,24 +417,237 @@ def analyze_features(features_df, metadata_df, output_path):
         f.write(f"PCA explained variance ratio: {pca.explained_variance_ratio_}\n")
 
 
+def generate_mel_spectrogram(audio_data, sample_rate, n_mels=128, max_len=128):
+    """
+    Generate mel-spectrogram from audio data
+    
+    Args:
+        audio_data: Audio time series
+        sample_rate: Sample rate
+        n_mels: Number of mel bands
+        max_len: Maximum time steps
+    
+    Returns:
+        Normalized mel-spectrogram
+    """
+    try:
+        # Generate mel-spectrogram
+        mel_spec = librosa.feature.melspectrogram(
+            y=audio_data,
+            sr=sample_rate,
+            n_mels=n_mels,
+            n_fft=2048,
+            hop_length=512
+        )
+        
+        # Convert to dB scale
+        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
+        
+        # Normalize to [0, 1]
+        mel_spec_norm = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min() + 1e-8)
+        
+        # Pad or truncate to fixed length
+        if mel_spec_norm.shape[1] < max_len:
+            pad_width = max_len - mel_spec_norm.shape[1]
+            mel_spec_norm = np.pad(mel_spec_norm, ((0, 0), (0, pad_width)), mode='constant')
+        else:
+            mel_spec_norm = mel_spec_norm[:, :max_len]
+        
+        return mel_spec_norm
+    
+    except Exception as e:
+        print(f"Error generating spectrogram: {e}")
+        return np.zeros((n_mels, max_len))
+
+
+def process_audio_file_with_spectrogram(file_path, n_mels=128, max_len=128):
+    """
+    Process audio file and generate both features and spectrogram
+    
+    Args:
+        file_path: Path to audio file
+        n_mels: Number of mel bands
+        max_len: Maximum time steps
+    
+    Returns:
+        spectrogram, metadata
+    """
+    # Parse file name for metadata (reuse existing logic)
+    file_name = os.path.basename(file_path)
+    file_parts = file_name.split("-")
+    
+    emotion_labels = {
+        '01': 'neutral',
+        '02': 'calm',
+        '03': 'happy',
+        '04': 'sad',
+        '05': 'angry',
+        '06': 'fearful',
+        '07': 'disgust',
+        '08': 'surprised'
+    }
+    
+    metadata = {}
+    
+    if len(file_parts) >= 7:
+        metadata['file_path'] = file_path
+        metadata['modality'] = file_parts[0]
+        metadata['voice_channel'] = file_parts[1]
+        metadata['emotion'] = emotion_labels.get(file_parts[2], 'unknown')
+        metadata['intensity'] = file_parts[3]
+        metadata['statement'] = file_parts[4]
+        metadata['repetition'] = file_parts[5]
+        metadata['actor'] = file_parts[6].split('.')[0]
+        metadata['gender'] = 'female' if int(metadata['actor']) % 2 == 0 else 'male'
+    else:
+        print(f"Invalid file name format: {file_name}")
+        return None, None
+    
+    # Load audio
+    audio_data, sample_rate = load_audio_file(file_path)
+    if audio_data is None:
+        return None, metadata
+    
+    # Preprocess audio (reuse existing functions)
+    audio_data = remove_silence(audio_data, sample_rate)
+    audio_data = normalize_volume(audio_data)
+    
+    # Generate spectrogram
+    spectrogram = generate_mel_spectrogram(audio_data, sample_rate, n_mels, max_len)
+    
+    return spectrogram, metadata
+
+
+def process_audio_directory_spectrograms(directory_path, output_path, n_mels=128, max_len=128, max_files=None):
+    """
+    Process all audio files and generate spectrograms
+    
+    Args:
+        directory_path: Path to directory containing audio files
+        output_path: Path to save spectrograms
+        n_mels: Number of mel bands
+        max_len: Maximum time steps
+        max_files: Maximum number of files to process
+    
+    Returns:
+        spectrograms array, labels array, metadata DataFrame
+    """
+    all_spectrograms = []
+    all_labels = []
+    all_metadata = []
+    
+    # Find all wav files
+    wav_files = []
+    for root, _, files in os.walk(directory_path):
+        for file in files:
+            if file.endswith('.wav'):
+                wav_files.append(os.path.join(root, file))
+    
+    wav_files.sort()
+    
+    if max_files is not None:
+        wav_files = wav_files[:max_files]
+    
+    print(f"Processing {len(wav_files)} audio files for spectrograms...")
+    
+    for file_path in tqdm(wav_files, desc="Generating spectrograms"):
+        spectrogram, metadata = process_audio_file_with_spectrogram(file_path, n_mels, max_len)
+        
+        if spectrogram is not None and metadata is not None:
+            all_spectrograms.append(spectrogram)
+            all_labels.append(metadata['emotion'])
+            all_metadata.append(metadata)
+    
+    print(f"Successfully processed {len(all_spectrograms)} spectrograms")
+    
+    # Convert to numpy arrays
+    X = np.array(all_spectrograms)
+    y = np.array(all_labels)
+    metadata_df = pd.DataFrame(all_metadata)
+    
+    # Add channel dimension for CNN: (n_samples, n_mels, time, 1)
+    X = X[..., np.newaxis]
+    
+    # Save to disk
+    os.makedirs(output_path, exist_ok=True)
+    np.save(os.path.join(output_path, "spectrograms.npy"), X)
+    np.save(os.path.join(output_path, "labels.npy"), y)
+    metadata_df.to_csv(os.path.join(output_path, "spectrogram_metadata.csv"), index=False)
+    
+    print(f"Spectrograms saved to {output_path}")
+    print(f"Spectrogram shape: {X.shape}")
+    
+    return X, y, metadata_df
+
+
 if __name__ == "__main__":
     from data_setup import AUDIO_SONG_PATH, AUDIO_SPEECH_PATH, PROCESSED_PATH
-
-    speech_output = PROCESSED_PATH / "audio_features" / "speech"
-    song_output = PROCESSED_PATH / "audio_features" / "song"
+    import argparse
     
-    print("Processing speech audio files...")
-    speech_features, speech_metadata = process_audio_directory(AUDIO_SPEECH_PATH, speech_output, visualize_sample=True)
-
-
-    print("Processing song audio files...")
-    song_features, song_metadata = process_audio_directory(AUDIO_SONG_PATH, song_output, visualize_sample=True)
-
-    print("Analyzing speech features...")
-    analyze_features(speech_features, speech_metadata, speech_output)
+    parser = argparse.ArgumentParser(description="Audio preprocessing")
+    parser.add_argument("--mode", type=str, choices=["features", "spectrograms", "both"], 
+                       default="both", help="What to generate")
+    parser.add_argument("--visualize", action="store_true", help="Generate visualizations")
     
-    print("Analyzing song features...")
-    analyze_features(song_features, song_metadata, song_output)
+    args = parser.parse_args()
     
-    print("Audio preprocessing completed successfully!")
-
+    # Define output paths
+    speech_features_output = PROCESSED_PATH / "audio_features" / "speech"
+    song_features_output = PROCESSED_PATH / "audio_features" / "song"
+    speech_spec_output = PROCESSED_PATH / "audio_spectrograms" / "speech"
+    song_spec_output = PROCESSED_PATH / "audio_spectrograms" / "song"
+    
+    # Process features (original approach)
+    if args.mode in ["features", "both"]:
+        print("\n" + "="*60)
+        print("PROCESSING AUDIO FEATURES")
+        print("="*60 + "\n")
+        
+        print("Processing speech audio files...")
+        speech_features, speech_metadata = process_audio_directory(
+            AUDIO_SPEECH_PATH, speech_features_output, visualize_sample=args.visualize
+        )
+        
+        print("Processing song audio files...")
+        song_features, song_metadata = process_audio_directory(
+            AUDIO_SONG_PATH, song_features_output, visualize_sample=args.visualize
+        )
+        
+        print("Analyzing speech features...")
+        analyze_features(speech_features, speech_metadata, speech_features_output)
+        
+        print("Analyzing song features...")
+        analyze_features(song_features, song_metadata, song_features_output)
+    
+    # Process spectrograms (new approach)
+    if args.mode in ["spectrograms", "both"]:
+        print("\n" + "="*60)
+        print("GENERATING MEL-SPECTROGRAMS")
+        print("="*60 + "\n")
+        
+        print("Generating spectrograms for speech audio...")
+        X_speech, y_speech, meta_speech = process_audio_directory_spectrograms(
+            AUDIO_SPEECH_PATH, speech_spec_output, n_mels=128, max_len=128
+        )
+        
+        print("Generating spectrograms for song audio...")
+        X_song, y_song, meta_song = process_audio_directory_spectrograms(
+            AUDIO_SONG_PATH, song_spec_output, n_mels=128, max_len=128
+        )
+        
+        # Visualize some spectrograms
+        if args.visualize:
+            plt.figure(figsize=(15, 10))
+            for i in range(min(8, len(X_speech))):
+                plt.subplot(2, 4, i+1)
+                plt.imshow(X_speech[i, :, :, 0], aspect='auto', cmap='viridis', origin='lower')
+                plt.title(f"{y_speech[i]}")
+                plt.colorbar()
+            plt.tight_layout()
+            plt.savefig(speech_spec_output / "spectrogram_samples.png")
+            plt.close()
+            print(f"Spectrogram samples saved to {speech_spec_output}")
+    
+    print("\n" + "="*60)
+    print("AUDIO PREPROCESSING COMPLETE!")
+    print("="*60)

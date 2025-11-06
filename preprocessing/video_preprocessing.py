@@ -858,8 +858,8 @@ if __name__ == "__main__":
         speech_features, speech_metadata = process_video_dataset(
             VIDEO_SPEECH_PATH,
             speech_output_dir,
-            sample_rate=5,
-            visualize_subset=True
+            sample_rate=10,
+            visualize_subset=False
         )
         speech_time = time.time() - start_time
         print(f"Speech video preprocessing completed in {speech_time:.2f} seconds. Results saved to {speech_output_dir}")
@@ -874,8 +874,8 @@ if __name__ == "__main__":
         song_features, song_metadata = process_video_dataset(
             VIDEO_SONG_PATH,
             song_output_dir,
-            sample_rate=5,
-            visualize_subset=True
+            sample_rate=10,
+            visualize_subset=False
         )
         song_time = time.time() - start_time
         print(f"Song video preprocessing completed in {song_time:.2f} seconds. Results saved to {song_output_dir}")

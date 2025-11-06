@@ -1,7 +1,7 @@
 {
     "model": {
         "name": "video_cnn_lstm_attention",
-        "input_shape": [100, 20],
+        "input_shape": [30, 20],
         "cnn_filters": [32, 64, 128],
         "cnn_kernel_size": 3,
         "cnn_pool_size": 2,
@@ -14,11 +14,11 @@
     },
     "training": {
         "batch_size": 32,
-        "epochs": 50,
-        "learning_rate": 0.0001,
-        "weight_decay": 0.00001,
-        "early_stopping_patience": 10,
-        "reduce_lr_patience": 5,
+        "epochs": 100,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0001,
+        "early_stopping_patience": 25,
+        "reduce_lr_patience": 10,
         "reduce_lr_factor": 0.5
     },
     "data": {
@@ -28,7 +28,7 @@
         "test_size": 0.2,
         "validation_size": 0.2,
         "random_state": 42,
-        "sequence_length": 100,
+        "sequence_length": 30,
         "feature_columns": [
             "left_eye_ear", "right_eye_ear", "avg_eye_ear",
             "mouth_aspect_ratio", "left_eyebrow_eye_dist", "right_eyebrow_eye_dist",
