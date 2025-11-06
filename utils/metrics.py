@@ -10,36 +10,20 @@ from sklearn.metrics import (
 )
 
 def calculate_metrics(y_true, y_pred, class_names=None):
-    """
-    Calculate performance metrics
-    
-    Args:
-        y_true: True labels (integer encoded)
-        y_pred: Predicted labels (integer encoded)
-        class_names: List of class names
-    
-    Returns:
-        Dictionary of metrics
-    """
-    # Calculate overall metrics
     accuracy = accuracy_score(y_true, y_pred)
     precision, recall, f1, support = precision_recall_fscore_support(
         y_true, y_pred, average='weighted'
     )
     
-    # Calculate per-class metrics
     per_class_precision, per_class_recall, per_class_f1, per_class_support = precision_recall_fscore_support(
         y_true, y_pred, average=None
     )
     
-    # Generate confusion matrix
     cm = confusion_matrix(y_true, y_pred)
     
-    # If class names not provided, use numbers
     if class_names is None:
         class_names = [str(i) for i in range(len(np.unique(y_true)))]
     
-    # Create metrics dictionary
     metrics = {
         'accuracy': accuracy,
         'precision': precision,
@@ -58,18 +42,9 @@ def calculate_metrics(y_true, y_pred, class_names=None):
     return metrics
 
 def plot_confusion_matrix(metrics, output_path=None, figsize=(10, 8)):
-    """
-    Plot confusion matrix
-    
-    Args:
-        metrics: Dictionary of metrics from calculate_metrics
-        output_path: Path to save plot
-        figsize: Figure size
-    """
     cm = metrics['confusion_matrix']
     class_names = metrics['class_names']
     
-    # Normalize confusion matrix
     cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
     
     plt.figure(figsize=figsize)
@@ -92,17 +67,8 @@ def plot_confusion_matrix(metrics, output_path=None, figsize=(10, 8)):
     plt.show()
 
 def plot_metrics(history, output_path=None, figsize=(12, 5)):
-    """
-    Plot training history metrics
-    
-    Args:
-        history: Keras history object
-        output_path: Path to save plot
-        figsize: Figure size
-    """
     plt.figure(figsize=figsize)
     
-    # Plot accuracy
     plt.subplot(1, 2, 1)
     plt.plot(history.history['accuracy'], label='Train')
     plt.plot(history.history['val_accuracy'], label='Validation')
@@ -111,7 +77,6 @@ def plot_metrics(history, output_path=None, figsize=(12, 5)):
     plt.ylabel('Accuracy')
     plt.legend()
     
-    # Plot loss
     plt.subplot(1, 2, 2)
     plt.plot(history.history['loss'], label='Train')
     plt.plot(history.history['val_loss'], label='Validation')
@@ -128,17 +93,9 @@ def plot_metrics(history, output_path=None, figsize=(12, 5)):
     plt.show()
 
 def print_classification_report(metrics):
-    """
-    Print classification report
-    
-    Args:
-        metrics: Dictionary of metrics from calculate_metrics
-    """
-    # Get per-class metrics
     per_class = metrics['per_class']
     class_names = metrics['class_names']
     
-    # Create DataFrame for report
     report = pd.DataFrame({
         'Precision': [per_class['precision'][c] for c in class_names],
         'Recall': [per_class['recall'][c] for c in class_names],
@@ -146,7 +103,6 @@ def print_classification_report(metrics):
         'Support': [per_class['support'][c] for c in class_names]
     }, index=class_names)
     
-    # Add weighted average
     report.loc['weighted avg'] = [
         metrics['precision'],
         metrics['recall'],
@@ -154,7 +110,6 @@ def print_classification_report(metrics):
         sum(per_class['support'].values())
     ]
     
-    # Print report
     print("\nClassification Report:")
     print("======================")
     print(report.round(3))

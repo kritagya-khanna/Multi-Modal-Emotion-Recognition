@@ -13,17 +13,13 @@ warnings.filterwarnings('ignore')
 
 def load_audio_file(file_path):
     try:
-        audio_data, sample_rate = librosa.load(file_path, sr=None) #sr = none means load audio with original sample rate
+        audio_data, sample_rate = librosa.load(file_path, sr=None)
         return audio_data, sample_rate
     except Exception as e:
         print(f"Error loading file {file_path}: {e}")
         return None, None
     
 def remove_silence(audio_data, sample_rate, threshold = 0.01):
-    #audio_data: audio time series
-    #sample_rate int: sample rate of the audio file
-    #threshold: threshold for silence removal
-
     trimmed_audio, _ = librosa.effects.trim(audio_data, top_db = 20, frame_length=512, hop_length=64)
     return trimmed_audio
 
@@ -33,34 +29,19 @@ def normalize_volume(audio_data):
 def extract_features(audio_data ,sample_rate, n_mfcc=13, n_mels=128, fmax=8000):
     features = {}
 
-    #frame paramteres
-    hop_length = int(sample_rate * 0.010) # 10ms
-    win_length = int(sample_rate * 0.025) # 25ms
-
-    # 1. time domain features
-    #zero crossing rate-  rate at which a signal changes its sign from positive to negative
-    #High ZCR → Unvoiced sounds (e.g., consonants like /s/, /f/)
-    #Low ZCR → Voiced sounds (e.g., vowels like /a/, /o/)
-    #Higher ZCR → Angry, excited speech
-    #Lower ZCR → Calm, neutral speech
-    #High ZCR → Noisy or percussive music (e.g., rock, hip-hop)
-    #Low ZCR → Smooth melodies (e.g., classical, jazz)
+    hop_length = int(sample_rate * 0.010)
+    win_length = int(sample_rate * 0.025)
 
     zrc = librosa.feature.zero_crossing_rate(audio_data, hop_length = hop_length)[0]
     features["zrc_mean"] = np.mean(zrc)
     features['zrc_std'] = np.std(zrc)
     features['zrc-max'] = np.max(zrc)
 
-    # 2. RMS energy - useful for stress and emphasis detection
-    # Higher for louder sounds, correlates with emotional intensity
     rms  = librosa.feature.rms(y = audio_data, hop_length = hop_length)[0]
     features['rms_mean'] = np.mean(rms)
     features['rms_std'] = np.std(rms)
     features['rms_max'] = np.max(rms)
 
-    #mfccs - Mel-frequency cepstral coefficients
-    # Captures vocal tract configuration (how we shape our mouth/throat)
-    
     mfcc_coeff = librosa.feature.mfcc(
         y = audio_data,
         sr = sample_rate,
@@ -74,10 +55,9 @@ def extract_features(audio_data ,sample_rate, n_mfcc=13, n_mels=128, fmax=8000):
     for i in range(n_mfcc):
         features[f'mfcc{i+1}_mean'] = np.mean(mfcc_coeff[i])
         features[f'mfcc{i+1}_std'] = np.std(mfcc_coeff[i])
-        features[f'mfcc{i+1}_skew'] = skew(mfcc_coeff[i]) #bend of graph, left or right symmertic 
-        features[f'mfcc{i+1}_kurt'] = kurtosis(mfcc_coeff[i]) #peakedness of the distribution, how much data is in the tails of the distribution
+        features[f'mfcc{i+1}_skew'] = skew(mfcc_coeff[i])
+        features[f'mfcc{i+1}_kurt'] = kurtosis(mfcc_coeff[i])
 
-    #delta = velocity delta-delta = acceleration of mfcc, how feature changes over time
     mfcc_delta = librosa.feature.delta(mfcc_coeff)
     mfcc_delta_delta = librosa.feature.delta(mfcc_coeff, order=2)
 
@@ -87,52 +67,25 @@ def extract_features(audio_data ,sample_rate, n_mfcc=13, n_mels=128, fmax=8000):
         features[f'mfcc{i+1}_delta2_mean'] = np.mean(mfcc_delta_delta[i])
         features[f'mfcc{i+1}_delta2_std'] = np.std(mfcc_delta_delta[i])
 
-
-    #spectral centroid - center of mass of the spectrum, indicates brightness of sound
-    #Higher centroid → Brighter sound (e.g., cymbals, flutes)
-    #Lower centroid → Darker sound (e.g., bass, cello)
-    #Higher centroid → Happy, excited speech
-    #Lower centroid → Sad, calm speech
     cent = librosa.feature.spectral_centroid(y = audio_data, sr = sample_rate, hop_length = hop_length)[0]
     features['spectral_centroid_mean'] = np.mean(cent)
     features['spectral_centroid_std'] = np.std(cent)
 
-
-    #spectral bandwidth - width of the spectrum, indicates timbre of sound
-    #Higher bandwidth → Wider sound (e.g., brass, distorted guitars)
-    #Lower bandwidth → Narrower sound (e.g., strings, flutes)
-    #Higher bandwidth → Complex, rich sound
-    #Lower bandwidth → Simple, pure sound
     bandwidth = librosa.feature.spectral_bandwidth(y= audio_data, sr = sample_rate, hop_length = hop_length)[0]
     features['spectral_bandwidth_mean'] = np.mean(bandwidth)
     features['spectral_bandwidth_std'] = np.std(bandwidth)
 
-    #spectral contrast - difference in amplitude between peaks and valleys in the spectrum
-    #Higher contrast → Richer sound (e.g., piano, guitar)
-    #Lower contrast → Sparser sound (e.g., flute, clarinet)
-    #Higher contrast → Complex, rich sound
-    #Lower contrast → Simple, pure sound
     contrast = librosa.feature.spectral_contrast(y = audio_data, sr = sample_rate, hop_length = hop_length)[0]
     features['spectral_contrast_mean'] = np.mean(contrast)
     features['spectral_contrast_std'] = np.std(contrast)
 
-    #spectral rolloff - frequency below which a certain percentage of the total spectral energy is contained
-    #Higher rolloff → More energy in higher frequencies (e.g., distorted guitars, brass)
-    #Lower rolloff → More energy in lower frequencies (e.g., bass, cello)
-    #Higher rolloff → Complex, rich sound
-    #Lower rolloff → Simple, pure sound
     rolloff = librosa.feature.spectral_rolloff(y = audio_data, sr = sample_rate, hop_length = hop_length)[0]
     features['rolloff_mean'] = np.mean(rolloff)
     features['rolloff_std'] = np.std(rolloff)
 
-
-    # 3. voice-specific features
-    #pitch - perceived frequency of a sound, indicates pitch of voice
-    #Fundamental frequency - varies with emotion (higher for happy/surprised)  
-
     if len(audio_data) > 0:
         try:
-            pitches, magnitude = librosa.piptrack(y = audio_data, sr = sample_rate, hop_length = hop_length, fmin= 50, fmax = 1600) #min and max human voice frequency
+            pitches, magnitude = librosa.piptrack(y = audio_data, sr = sample_rate, hop_length = hop_length, fmin= 50, fmax = 1600)
 
             pitches_values = []
             for i in range(magnitude.shape[1]):
@@ -153,20 +106,9 @@ def extract_features(audio_data ,sample_rate, n_mfcc=13, n_mels=128, fmax=8000):
             features['pitch_max'] = 0
             features['pitch_min'] = 0
 
-    # 4, rhythm features
-    #tempo - speed of the music, indicates energy level
-    #Higher tempo → Faster rhythm (e.g., dance, electronic music)
-    #Lower tempo → Slower rhythm (e.g., ballads, classical music)
-    #Higher tempo → Excited, energetic speech
-    #Lower tempo → Calm, relaxed speech
     onset_env = librosa.onset.onset_strength(y = audio_data, sr = sample_rate, hop_length = hop_length)
     tempo = librosa.beat.tempo(onset_envelope = onset_env, sr = sample_rate, hop_length = hop_length)[0]
     features['tempo'] = tempo
-
-    # 5. chroma features
-    #Chroma features - energy distribution across 12 pitch classes, indicates harmony and tonality
-    #Higher chroma features → Richer harmony (e.g., complex chords)
-    #Lower chroma features → Simpler harmony (e.g., single notes)
 
     chroma= librosa.feature.chroma_stft(y = audio_data, sr = sample_rate, hop_length = hop_length)
     for i in range(12):
@@ -176,25 +118,7 @@ def extract_features(audio_data ,sample_rate, n_mfcc=13, n_mels=128, fmax=8000):
     return features
 
 
-# def save_features_to_csv(features, output_path):
-#     # Create a DataFrame from the features dictionary
-#     df = pd.DataFrame([features])
-
-#     # Save the DataFrame to a CSV file
-#     df.to_csv(output_path, index=False)
-
 def process_audio_file(file_path, visualize = False):
-    #complete processing pipeline for single audio file:
-    #1. load audio file
-    #2. remove silence
-    #3. normalize volume
-    #4. extract features
-    #5. visualize(optional)
-
-    #returns: features_dict, metadeta_dict
-
-    #parse file name for metadata
-    #ravdess naming: modality - voice channel - emotion - intensity - statement - repetition - actor
     file_name = os.path.basename(file_path)
     file_parts = file_name.split("-")
     
@@ -230,30 +154,22 @@ def process_audio_file(file_path, visualize = False):
     if audio_data is None:
         return None, metadata
 
-    #preprocess audio
-    # 1. remove silence
     audio_data = remove_silence(audio_data, sample_rate)
-    # 2. normalize volume
     audio_data = normalize_volume(audio_data)
 
-    # 3. extract features   
     features = extract_features(audio_data, sample_rate)
 
 
     if visualize: 
 
-        #create a directoy for visualizations
         visualization_dir = Path("d:/multimodal emotion recognition system/processed/audio_visualizations") 
         visualization_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create actor+emotion directory
         actor_emotion_dir = visualization_dir / f"actor_{metadata['actor']}_{metadata['emotion']}"
         actor_emotion_dir.mkdir(exist_ok=True)
         
-        # Base filename for plots
         base_filename = file_name.replace('.wav', '')
 
-        # Plot and save the waveform
         plt.figure(figsize=(12, 4))
         plt.subplot(2, 1, 1)
         librosa.display.waveshow(audio_data, sr=sample_rate)
@@ -269,7 +185,6 @@ def process_audio_file(file_path, visualize = False):
         plt.savefig(actor_emotion_dir / f"{base_filename}_waveform.png")
         plt.close()
 
-        #plot mfcc
         plt.figure(figsize=(12, 6))
         mfcc_coeff = librosa.feature.mfcc(y=audio_data, sr=sample_rate, n_mfcc=13)
 
@@ -284,12 +199,6 @@ def process_audio_file(file_path, visualize = False):
 
 
 def process_audio_directory(directory_path, output_path, max_files = None, visualize_sample = False):
-    #Process all audio files in a directory and its subdirectories.
-    #directory_path: path to the directory containing audio files
-    #output_path: path to save the features and metadata
-    #max_files: maximum number of files to process (for testing purposes)
-    #visualize_sample: whether to visualize a sample of the audio files
-
     all_features = []
     all_metadata = []
     File_count = 0
@@ -317,11 +226,9 @@ def process_audio_directory(directory_path, output_path, max_files = None, visua
 
     print(f"Successfully processed {len(all_features)} out of {len(wav_files)} files")
 
-    # Create DataFrames for features and metadata
     features_df = pd.DataFrame(all_features)
     metadata_df = pd.DataFrame(all_metadata)
 
-    # Save features and metadata to CSV files
     os.makedirs(output_path, exist_ok=True)
     features_df.to_csv(os.path.join(output_path, "audio_features.csv"), index = False)
     metadata_df.to_csv(os.path.join(output_path, "audio_metadata.csv"), index = False)
@@ -335,18 +242,11 @@ def process_audio_directory(directory_path, output_path, max_files = None, visua
     return features_df, metadata_df
 
 def analyze_features(features_df, metadata_df, output_path):
-    #Analyze extrated features and generate visualizations
-    #features_df: DataFrame containing features
-    #metadata_df: DataFrame containing metadata
-    #output_path: path to save the visualizations
-
     analysis_dir = Path(output_path) / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
 
-    #combine data for analysis
     combined_df = pd.concat([features_df, metadata_df], axis=1)
 
-    # 1. distribution of emotion classes 
     plt.figure(figsize=(12, 6))
     emotion_counts = combined_df['emotion'].value_counts()
     sns.barplot(x=emotion_counts.index, y=emotion_counts.values)
@@ -356,7 +256,6 @@ def analyze_features(features_df, metadata_df, output_path):
     plt.savefig(analysis_dir / "emotion_distribution.png")
     plt.close()
 
-    # 2. gender distribution
     plt.figure(figsize=(10, 5))
     gender_counts = combined_df['gender'].value_counts()
     sns.barplot(x=gender_counts.index, y=gender_counts.values)
@@ -365,7 +264,6 @@ def analyze_features(features_df, metadata_df, output_path):
     plt.savefig(analysis_dir / "gender_distribution.png")
     plt.close()
 
-    # 3. Feature distribution by emotion (for key features)
     key_features = ['mfcc1_mean', 'mfcc2_mean', 'spectral_centroid_mean', 'zrc_mean', 'rms_mean']
 
     for feature in key_features:
@@ -378,7 +276,6 @@ def analyze_features(features_df, metadata_df, output_path):
             plt.savefig(analysis_dir / f"{feature}_by_emotion.png")
             plt.close()
     
-    # 4. Correlation matix of features
     plt.figure(figsize = (20, 16))
     numeric_features = features_df.select_dtypes(include = [np.number])
     correlation_matrix = numeric_features.corr()
@@ -418,20 +315,7 @@ def analyze_features(features_df, metadata_df, output_path):
 
 
 def generate_mel_spectrogram(audio_data, sample_rate, n_mels=128, max_len=128):
-    """
-    Generate mel-spectrogram from audio data
-    
-    Args:
-        audio_data: Audio time series
-        sample_rate: Sample rate
-        n_mels: Number of mel bands
-        max_len: Maximum time steps
-    
-    Returns:
-        Normalized mel-spectrogram
-    """
     try:
-        # Generate mel-spectrogram
         mel_spec = librosa.feature.melspectrogram(
             y=audio_data,
             sr=sample_rate,
@@ -440,13 +324,10 @@ def generate_mel_spectrogram(audio_data, sample_rate, n_mels=128, max_len=128):
             hop_length=512
         )
         
-        # Convert to dB scale
         mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
         
-        # Normalize to [0, 1]
         mel_spec_norm = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min() + 1e-8)
         
-        # Pad or truncate to fixed length
         if mel_spec_norm.shape[1] < max_len:
             pad_width = max_len - mel_spec_norm.shape[1]
             mel_spec_norm = np.pad(mel_spec_norm, ((0, 0), (0, pad_width)), mode='constant')
@@ -461,18 +342,6 @@ def generate_mel_spectrogram(audio_data, sample_rate, n_mels=128, max_len=128):
 
 
 def process_audio_file_with_spectrogram(file_path, n_mels=128, max_len=128):
-    """
-    Process audio file and generate both features and spectrogram
-    
-    Args:
-        file_path: Path to audio file
-        n_mels: Number of mel bands
-        max_len: Maximum time steps
-    
-    Returns:
-        spectrogram, metadata
-    """
-    # Parse file name for metadata (reuse existing logic)
     file_name = os.path.basename(file_path)
     file_parts = file_name.split("-")
     
@@ -503,40 +372,23 @@ def process_audio_file_with_spectrogram(file_path, n_mels=128, max_len=128):
         print(f"Invalid file name format: {file_name}")
         return None, None
     
-    # Load audio
     audio_data, sample_rate = load_audio_file(file_path)
     if audio_data is None:
         return None, metadata
     
-    # Preprocess audio (reuse existing functions)
     audio_data = remove_silence(audio_data, sample_rate)
     audio_data = normalize_volume(audio_data)
     
-    # Generate spectrogram
     spectrogram = generate_mel_spectrogram(audio_data, sample_rate, n_mels, max_len)
     
     return spectrogram, metadata
 
 
 def process_audio_directory_spectrograms(directory_path, output_path, n_mels=128, max_len=128, max_files=None):
-    """
-    Process all audio files and generate spectrograms
-    
-    Args:
-        directory_path: Path to directory containing audio files
-        output_path: Path to save spectrograms
-        n_mels: Number of mel bands
-        max_len: Maximum time steps
-        max_files: Maximum number of files to process
-    
-    Returns:
-        spectrograms array, labels array, metadata DataFrame
-    """
     all_spectrograms = []
     all_labels = []
     all_metadata = []
     
-    # Find all wav files
     wav_files = []
     for root, _, files in os.walk(directory_path):
         for file in files:
@@ -560,15 +412,12 @@ def process_audio_directory_spectrograms(directory_path, output_path, n_mels=128
     
     print(f"Successfully processed {len(all_spectrograms)} spectrograms")
     
-    # Convert to numpy arrays
     X = np.array(all_spectrograms)
     y = np.array(all_labels)
     metadata_df = pd.DataFrame(all_metadata)
     
-    # Add channel dimension for CNN: (n_samples, n_mels, time, 1)
     X = X[..., np.newaxis]
     
-    # Save to disk
     os.makedirs(output_path, exist_ok=True)
     np.save(os.path.join(output_path, "spectrograms.npy"), X)
     np.save(os.path.join(output_path, "labels.npy"), y)
@@ -591,13 +440,11 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    # Define output paths
     speech_features_output = PROCESSED_PATH / "audio_features" / "speech"
     song_features_output = PROCESSED_PATH / "audio_features" / "song"
     speech_spec_output = PROCESSED_PATH / "audio_spectrograms" / "speech"
     song_spec_output = PROCESSED_PATH / "audio_spectrograms" / "song"
     
-    # Process features (original approach)
     if args.mode in ["features", "both"]:
         print("\n" + "="*60)
         print("PROCESSING AUDIO FEATURES")
@@ -619,7 +466,6 @@ if __name__ == "__main__":
         print("Analyzing song features...")
         analyze_features(song_features, song_metadata, song_features_output)
     
-    # Process spectrograms (new approach)
     if args.mode in ["spectrograms", "both"]:
         print("\n" + "="*60)
         print("GENERATING MEL-SPECTROGRAMS")
@@ -635,7 +481,6 @@ if __name__ == "__main__":
             AUDIO_SONG_PATH, song_spec_output, n_mels=128, max_len=128
         )
         
-        # Visualize some spectrograms
         if args.visualize:
             plt.figure(figsize=(15, 10))
             for i in range(min(8, len(X_speech))):
