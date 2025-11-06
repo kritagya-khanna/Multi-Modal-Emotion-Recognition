@@ -15,7 +15,7 @@ import sys
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.video.cnn_lstm_video import build_video_cnn_lstm_attention
+from models.video.cnn_lstm import build_video_cnn_lstm_attention
 from utils.video_data_generator import VideoDataGenerator, load_and_prepare_video_data
 from utils.metrics import calculate_metrics, plot_confusion_matrix, plot_metrics, print_classification_report
 

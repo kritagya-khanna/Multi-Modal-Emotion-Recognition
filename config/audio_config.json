@@ -1,8 +1,8 @@
 {
     "model": {
-        "name": "cnn_lstm_attention",
+        "name": "simple_cnn",
         "input_shape": [128, 128, 1],
-        "cnn_filters": [32, 64, 128, 256],
+        "cnn_filters": [32, 64, 128],
         "cnn_kernel_size": 3,
         "cnn_pool_size": 2,
         "lstm_units": 128,
@@ -14,16 +14,16 @@
     },
     "training": {
         "batch_size": 32,
-        "epochs": 50,
-        "learning_rate": 0.0001,
-        "weight_decay": 0.00001,
-        "early_stopping_patience": 10,
-        "reduce_lr_patience": 5,
+        "epochs": 100,
+        "learning_rate": 0.003,
+        "weight_decay": 0.0001,
+        "early_stopping_patience": 25,
+        "reduce_lr_patience": 10,
         "reduce_lr_factor": 0.5
     },
     "data": {
-        "speech_features_path": "processed/audio_features/speech/balanced_audio_features.csv",
-        "song_features_path": "processed/audio_features/song/balanced_audio_features.csv",
+        "speech_features_path": "processed/audio_features/speech/audio_combined.csv",
+        "song_features_path": "processed/audio_features/song/audio_combined.csv",
         "use_song_data": true,
         "test_size": 0.2,
         "validation_size": 0.2,
@@ -34,6 +34,6 @@
         "time_shift_ms": 100,
         "pitch_shift_steps": 2,
         "spec_augment": true,
-        "mixup_alpha": 0.2
+        "mixup_alpha": 0.6
     }
 }
