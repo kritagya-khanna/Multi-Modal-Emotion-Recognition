@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns  # Add this import for visualization
+import seaborn as sns
 from pathlib import Path
 from tqdm import tqdm
 import dlib
@@ -13,7 +13,7 @@ import math
 from scipy.spatial import distance
 import joblib
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA  # Add this for analysis function
+from sklearn.decomposition import PCA
 from skimage.feature import hog 
 from skimage.color import rgb2gray
 warnings.filterwarnings("ignore")
@@ -22,7 +22,6 @@ from data_setup import EMOTION_MAP, PROJECT_ROOT, DATA_PATH, PROCESSED_PATH
 
 print("initializing video preprocessing...")
 
-# initialize dlib's face detector 
 face_detector = dlib.get_frontal_face_detector()
 
 SHAPE_PREDICTOR_PATH = "models/shape_predictor_68_face_landmarks.dat/shape_predictor_68_face_landmarks.dat"
@@ -39,11 +38,6 @@ except Exception as e:
 print("initializing video preprocessing done.")
 
 def extract_frames(video_path, sample_rate = 5, max_frames = None):
-    # Extract frames from a video file at a specific sample rate
-    # video_path (str): Path to the video file
-    # sample_rate (int): Extract every Nth frame
-    # max_frames (int, optional): Maximum number of frames to extract
-
     try:
         cap = cv2.VideoCapture(video_path)
 
@@ -70,16 +64,15 @@ def extract_frames(video_path, sample_rate = 5, max_frames = None):
             'sample_rate': sample_rate
         }
 
-        # Extract metadata from filename (RAVDESS format)
         filename = video_metadata['filename']
         parts = filename.split('-')
         
         if len(parts) >= 7:
             try:
-                video_metadata['modality'] = parts[0]  # This should be 01 or 02
-                video_metadata['vocal_channel'] = parts[1]  # This should be 01 or 02 
-                video_metadata['emotion_code'] = parts[2]  # This contains the emotion code (01-08)
-                video_metadata['emotion'] = EMOTION_MAP.get(parts[2], 'unknown')  # Map the emotion code to name
+                video_metadata['modality'] = parts[0]
+                video_metadata['vocal_channel'] = parts[1]
+                video_metadata['emotion_code'] = parts[2]
+                video_metadata['emotion'] = EMOTION_MAP.get(parts[2], 'unknown')
                 video_metadata['intensity'] = 'normal' if parts[3] == '01' else 'strong'
                 video_metadata['statement'] = parts[4]
                 video_metadata['repetition'] = parts[5]
@@ -89,7 +82,6 @@ def extract_frames(video_path, sample_rate = 5, max_frames = None):
                 video_metadata['gender'] = 'female' if int(actor_id) % 2 == 0 else 'male'
             except Exception as e:
                 print(f"Error parsing filename {filename}: {e}")
-                # Add default values
                 video_metadata.setdefault('modality', 'unknown')
                 video_metadata.setdefault('vocal_channel', 'unknown')
                 video_metadata.setdefault('emotion', 'unknown')
@@ -112,13 +104,10 @@ def extract_frames(video_path, sample_rate = 5, max_frames = None):
         frame_indices = []
         frame_index = 0
 
-
-        # Calculate total number of frames we'll be extracting (not total video frames)
         expected_frames = min(frame_count // frame_interval + (1 if frame_count % frame_interval > 0 else 0), 
                              max_frames if max_frames else float('inf'))
         
 
-        # Show progress bar for frame extraction
         pbar = tqdm(total=expected_frames, 
                     desc=f"Extracting frames from {os.path.basename(video_path)}")
 
@@ -153,7 +142,6 @@ def extract_frames(video_path, sample_rate = 5, max_frames = None):
 
 
 def detect_faces_landmarks(frame):
-    # Detect faces and landmarks in a single frame using Dlib
     try:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = face_detector(gray, 0)
@@ -161,21 +149,19 @@ def detect_faces_landmarks(frame):
         if len(faces) == 0:
             return False, None, None, 0.0
         
-        face = faces[0]  # Use the first face detected
+        face = faces[0]
         detection_confidence = 1.0
 
-        # Get the landmarks for the face
         face_bbox = (face.left(), face.top(), face.right(), face.bottom())
         shape = landmark_predictor(gray, face)
 
-        # Convert landmarks to a list of (x, y, z) tuples
         h, w = gray.shape
         landmarks = []
 
         for i in range(68):
-            x = shape.part(i).x / w  # normalize to [0, 1]
+            x = shape.part(i).x / w
             y = shape.part(i).y / h
-            landmarks.append((x, y, 0.0))  # z is set to 0.0
+            landmarks.append((x, y, 0.0))
 
         return True, landmarks, face_bbox, detection_confidence
     
@@ -185,11 +171,9 @@ def detect_faces_landmarks(frame):
 
 
 def align_face(frame, landmarks, bbox, target_size=(224, 224)):
-    # Align the face in the frame using landmarks and bounding box
     try:
         x_min, y_min, x_max, y_max = bbox
 
-        # Add margin around face
         h, w = frame.shape[:2]
         margin_x = int((x_max - x_min) * 0.2)
         margin_y = int((y_max - y_min) * 0.2)
@@ -204,7 +188,6 @@ def align_face(frame, landmarks, bbox, target_size=(224, 224)):
         if face_img.size > 0:
             face_img = cv2.resize(face_img, target_size)
             
-            # Enhance image using CLAHE
             lab = cv2.cvtColor(face_img, cv2.COLOR_BGR2LAB)
             clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
             lab[:, :, 0] = clahe.apply(lab[:, :, 0])
@@ -220,12 +203,10 @@ def align_face(frame, landmarks, bbox, target_size=(224, 224)):
 
 
 def extract_geometric_features(landmarks):
-    # Extract geometric features from landmarks
     try:
         features = {}
         landmarks_array = np.array(landmarks)
 
-        # Define facial feature regions
         left_eye = list(range(42, 48))
         right_eye = list(range(36, 42))
         left_eyebrow = list(range(22, 27))
@@ -238,14 +219,10 @@ def extract_geometric_features(landmarks):
         nose_left = 31
         jaw_line = list(range(0, 17))
 
-        # 1. Eye aspect ratio (EAR) - measures eye openness
         def eye_aspect_ratio(eye_landmarks):
-            # Vertical distances
             vert1 = distance.euclidean(landmarks[eye_landmarks[1]], landmarks[eye_landmarks[5]])
             vert2 = distance.euclidean(landmarks[eye_landmarks[2]], landmarks[eye_landmarks[4]])
-            # Horizontal distance
             horiz = distance.euclidean(landmarks[eye_landmarks[0]], landmarks[eye_landmarks[3]])
-            # Calculate EAR
             ear = (vert1 + vert2) / (2.0 * horiz) if horiz > 0 else 0
             return ear
         
@@ -253,18 +230,16 @@ def extract_geometric_features(landmarks):
         features['right_eye_ear'] = eye_aspect_ratio(right_eye)
         features['avg_eye_ear'] = (features['left_eye_ear'] + features['right_eye_ear']) / 2.0
 
-        # 2. Mouth aspect ratio (MAR) - measures mouth openness
-        mouth_top = landmarks_array[mouth_outline[3]]  # Upper lip
-        mouth_bottom = landmarks_array[mouth_outline[9]]  # Lower lip
-        mouth_left = landmarks_array[mouth_outline[0]]  # Left corner
-        mouth_right = landmarks_array[mouth_outline[6]]  # Right corner
+        mouth_top = landmarks_array[mouth_outline[3]]
+        mouth_bottom = landmarks_array[mouth_outline[9]]
+        mouth_left = landmarks_array[mouth_outline[0]]
+        mouth_right = landmarks_array[mouth_outline[6]]
 
         mouth_width = distance.euclidean(mouth_left, mouth_right)
         mouth_height = distance.euclidean(mouth_top, mouth_bottom)
 
         features['mouth_aspect_ratio'] = mouth_height / mouth_width if mouth_width > 0 else 0
 
-        # 3. Eyebrow position relative to eyes
         left_eye_center = np.mean(landmarks_array[left_eye], axis=0)
         right_eye_center = np.mean(landmarks_array[right_eye], axis=0)
         
@@ -274,42 +249,33 @@ def extract_geometric_features(landmarks):
         features['left_eyebrow_eye_dist'] = left_eyebrow_center[1] - left_eye_center[1]
         features['right_eyebrow_eye_dist'] = right_eyebrow_center[1] - right_eye_center[1]
         
-        # 4. Mouth width to face width ratio
         face_width = distance.euclidean(landmarks_array[jaw_line[0]], landmarks_array[jaw_line[16]])
         features['mouth_face_width_ratio'] = mouth_width / face_width if face_width > 0 else 0
         
-        # 5. Smile ratio (measure of mouth curvature)
         mouth_corner_left = landmarks_array[mouth_outline[0]]
         mouth_corner_right = landmarks_array[mouth_outline[6]]
         mouth_center_top = landmarks_array[mouth_outline[3]]
         
-        # Calculate smile curve (higher values for upward curves)
         mouth_curve = (mouth_corner_left[1] + mouth_corner_right[1]) / 2 - mouth_center_top[1]
         features['smile_ratio'] = mouth_curve / mouth_width if mouth_width > 0 else 0
         
-        # 6. Nose wrinkle (distance between eyebrows and nose)
         nose_bridge = landmarks_array[nose_tip]
         between_eyebrows = (landmarks_array[left_eyebrow[2]] + landmarks_array[right_eyebrow[2]]) / 2
         features['nose_wrinkle'] = distance.euclidean(nose_bridge, between_eyebrows)
         
-        # 7. Eye openness ratio
         features['eye_openness_ratio'] = features['avg_eye_ear'] / features['mouth_aspect_ratio'] if features['mouth_aspect_ratio'] > 0 else 0
         
-        # 8. Asymmetry measures
         features['eye_asymmetry'] = abs(features['left_eye_ear'] - features['right_eye_ear'])
         features['eyebrow_asymmetry'] = abs(features['left_eyebrow_eye_dist'] - features['right_eyebrow_eye_dist'])
 
-        # 9. Jawline tension
         jaw_left = landmarks_array[jaw_line[0]]
         jaw_right = landmarks_array[jaw_line[16]]
         jaw_bottom = landmarks_array[jaw_line[8]]
         
-        # Calculate jaw angle
         jaw_leftside = distance.euclidean(jaw_left, jaw_bottom)
         jaw_rightside = distance.euclidean(jaw_right, jaw_bottom)
         features['jaw_asymmetry'] = abs(jaw_leftside - jaw_rightside) / (jaw_leftside + jaw_rightside) if (jaw_leftside + jaw_rightside) > 0 else 0
         
-        # 10. Inner mouth openness
         inner_mouth_top = landmarks_array[inner_mouth[3]]
         inner_mouth_bottom = landmarks_array[inner_mouth[1]]
         inner_mouth_height = distance.euclidean(inner_mouth_top, inner_mouth_bottom)
@@ -323,13 +289,11 @@ def extract_geometric_features(landmarks):
 
 
 def extract_appearance_features(aligned_face, hog_orientation=9, hog_pixel_per_cell=(8, 8), hog_cells_per_block=(2, 2)):
-    # Extract appearance features from the aligned face
     try:
         features = {}
 
         gray_face = rgb2gray(aligned_face)
 
-        # Compute HOG features
         hog_features, hog_image = hog(
             gray_face, 
             orientations=hog_orientation, 
@@ -344,11 +308,9 @@ def extract_appearance_features(aligned_face, hog_orientation=9, hog_pixel_per_c
         features['hog_min'] = np.min(hog_features)
         features['hog_max'] = np.max(hog_features)
         
-        # Basic image statistics
         features['face_brightness'] = np.mean(gray_face)
         features['face_contrast'] = np.std(gray_face)
         
-        # Edge intensity
         sobelx = cv2.Sobel(gray_face, cv2.CV_64F, 1, 0, ksize=3)
         sobely = cv2.Sobel(gray_face, cv2.CV_64F, 0, 1, ksize=3)
         edge_magnitude = np.sqrt(sobelx**2 + sobely**2)
@@ -363,7 +325,6 @@ def extract_appearance_features(aligned_face, hog_orientation=9, hog_pixel_per_c
 
 
 def draw_landmarks(frame, landmarks, bbox):
-    # Draw facial landmarks and bounding box on the frame
     try:
         vis_frame = frame.copy()
 
@@ -375,68 +336,55 @@ def draw_landmarks(frame, landmarks, bbox):
             x, y = int(landmark[0] * w), int(landmark[1] * h)
             cv2.circle(vis_frame, (x, y), 2, (0, 0, 255), -1)
 
-        # Connect landmarks to show facial features
-        # Jaw line
         for i in range(16):
             pt1 = (int(landmarks[i][0] * w), int(landmarks[i][1] * h))
             pt2 = (int(landmarks[i + 1][0] * w), int(landmarks[i + 1][1] * h))
             cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
         
-        # Right eyebrow
         for i in range(17, 21):
             pt1 = (int(landmarks[i][0] * w), int(landmarks[i][1] * h))
             pt2 = (int(landmarks[i + 1][0] * w), int(landmarks[i + 1][1] * h))
             cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
         
-        # Left eyebrow
         for i in range(22, 26):
             pt1 = (int(landmarks[i][0] * w), int(landmarks[i][1] * h))
             pt2 = (int(landmarks[i + 1][0] * w), int(landmarks[i + 1][1] * h))
             cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
         
-        # Nose bridge
         for i in range(27, 30):
             pt1 = (int(landmarks[i][0] * w), int(landmarks[i][1] * h))
             pt2 = (int(landmarks[i + 1][0] * w), int(landmarks[i + 1][1] * h))
             cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
         
-        # Nose bottom
         for i in range(31, 35):
             pt1 = (int(landmarks[i][0] * w), int(landmarks[i][1] * h))
             pt2 = (int(landmarks[i + 1][0] * w), int(landmarks[i + 1][1] * h))
             cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
         
-        # Connect nose bottom to nose bridge
         pt1 = (int(landmarks[30][0] * w), int(landmarks[30][1] * h))
         pt2 = (int(landmarks[35][0] * w), int(landmarks[35][1] * h))
         cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
 
-        # Right eye
         for i in range(36, 41):
             pt1 = (int(landmarks[i][0] * w), int(landmarks[i][1] * h))
             pt2 = (int(landmarks[i + 1][0] * w), int(landmarks[i + 1][1] * h))
             cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
-        # Close right eye
         pt1 = (int(landmarks[36][0] * w), int(landmarks[36][1] * h))
         pt2 = (int(landmarks[41][0] * w), int(landmarks[41][1] * h))
         cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
         
-        # Left eye
         for i in range(42, 47):
             pt1 = (int(landmarks[i][0] * w), int(landmarks[i][1] * h))
             pt2 = (int(landmarks[i + 1][0] * w), int(landmarks[i + 1][1] * h))
             cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
-        # Close left eye
         pt1 = (int(landmarks[42][0] * w), int(landmarks[42][1] * h))
         pt2 = (int(landmarks[47][0] * w), int(landmarks[47][1] * h))
         cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
         
-        # Outer mouth
         for i in range(48, 59):
             pt1 = (int(landmarks[i][0] * w), int(landmarks[i][1] * h))
             pt2 = (int(landmarks[i + 1][0] * w), int(landmarks[i + 1][1] * h))
             cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
-        # Close outer mouth
         pt1 = (int(landmarks[48][0] * w), int(landmarks[48][1] * h))
         pt2 = (int(landmarks[59][0] * w), int(landmarks[59][1] * h))
         cv2.line(vis_frame, pt1, pt2, (255, 0, 0), 1)
@@ -449,18 +397,6 @@ def draw_landmarks(frame, landmarks, bbox):
 
 
 def process_video(video_path, output_dir, visualize=False, sample_rate=5, max_frame=None):
-    """Process a single video file: extract frames, detect faces, extract features
-    
-    Args:
-        video_path: Path to the video file
-        output_dir: Path to save results
-        visualize: Whether to generate visualizations
-        sample_rate: Extract every Nth frame
-        max_frame: Maximum number of frames to process
-        
-    Returns:
-        list of feature dictionaries, video metadata
-    """
     try:
         frames, frame_count, video_metadata = extract_frames(video_path, sample_rate, max_frame)
         
@@ -490,41 +426,34 @@ def process_video(video_path, output_dir, visualize=False, sample_rate=5, max_fr
                     frame_features['face_detected'] = True
                     frame_features['detection_confidence'] = confidence
                     
-                    # Process detected face
                     aligned_face = align_face(frame, landmarks, bbox)
                     
-                    # Extract features
                     geometric_features = extract_geometric_features(landmarks)
                     frame_features.update(geometric_features)
                     
                     appearance_features, hog_image = extract_appearance_features(aligned_face)
                     frame_features.update(appearance_features)
                     
-                    # Generate visualizations if requested
                     if visualize and i % 10 == 0:
                         vis_frame = draw_landmarks(frame, landmarks, bbox)
                         
                         plt.figure(figsize=(15, 10))
                         
-                        # Original frame with landmarks
                         plt.subplot(2, 2, 1)
                         plt.imshow(vis_frame)
                         plt.title('Face Detection & Landmarks')
                         plt.axis('off')
                         
-                        # Aligned face
                         plt.subplot(2, 2, 2)
                         plt.imshow(aligned_face)
                         plt.title('Aligned Face')
                         plt.axis('off')
                         
-                        # HOG visualization
                         plt.subplot(2, 2, 3)
                         plt.imshow(hog_image, cmap='gray')
                         plt.title('HOG Features')
                         plt.axis('off')
                         
-                        # Key features
                         plt.subplot(2, 2, 4)
                         features_to_plot = {
                             'Mouth AR': geometric_features['mouth_aspect_ratio'],
@@ -536,7 +465,6 @@ def process_video(video_path, output_dir, visualize=False, sample_rate=5, max_fr
                         plt.title(f'Key Features - {video_metadata["emotion"]}')
                         plt.tight_layout()
                         
-                        # Save visualization
                         plt.savefig(vis_dir / f"frame_{i:04d}.png")
                         plt.close()
                 
@@ -549,14 +477,12 @@ def process_video(video_path, output_dir, visualize=False, sample_rate=5, max_fr
                 frame_features['face_detected'] = False
                 frame_features['detection_confidence'] = 0
             
-            # Add metadata from video to each frame
             for key in ['emotion', 'emotion_code', 'actor_id', 'actor', 'gender', 'intensity']:
                 if key in video_metadata:
                     frame_features[key] = video_metadata[key]
             
             all_features.append(frame_features)
         
-        # Update metadata with face detection statistics
         video_metadata['face_detected_count'] = face_detected_count
         video_metadata['face_detection_rate'] = face_detected_count / len(frames) if frames else 0
         
@@ -568,23 +494,14 @@ def process_video(video_path, output_dir, visualize=False, sample_rate=5, max_fr
 
 
 def analyze_video_features(features_df, metadata_df, output_path):
-    """Analyze extracted video features and generate visualizations
-    
-    Args:
-        features_df: DataFrame containing features
-        metadata_df: DataFrame containing metadata
-        output_path: path to save the visualizations
-    """
     analysis_dir = Path(output_path) / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
     
     try:
         print("Generating video feature analysis...")
         
-        # Combine data for analysis
         combined_df = features_df.copy()
         
-        # 1. Distribution of emotion classes
         plt.figure(figsize=(12, 6))
         emotion_counts = combined_df['emotion'].value_counts()
         sns.barplot(x=emotion_counts.index, y=emotion_counts.values)
@@ -594,7 +511,6 @@ def analyze_video_features(features_df, metadata_df, output_path):
         plt.savefig(analysis_dir / "video_emotion_distribution.png")
         plt.close()
         
-        # 2. Gender distribution
         plt.figure(figsize=(10, 5))
         gender_counts = combined_df['gender'].value_counts()
         sns.barplot(x=gender_counts.index, y=gender_counts.values)
@@ -603,7 +519,6 @@ def analyze_video_features(features_df, metadata_df, output_path):
         plt.savefig(analysis_dir / "video_gender_distribution.png")
         plt.close()
         
-        # 3. Feature distribution by emotion (for key features)
         key_features = ['mouth_aspect_ratio', 'avg_eye_ear', 'smile_ratio', 'face_brightness', 'hog_mean']
         
         for feature in key_features:
@@ -617,11 +532,9 @@ def analyze_video_features(features_df, metadata_df, output_path):
                 plt.savefig(analysis_dir / f"video_{feature}_by_emotion.png")
                 plt.close()
         
-        # 4. Correlation matrix of features
         valid_df = features_df[features_df['face_detected'] == True].copy()
         if len(valid_df) > 0:
             numeric_features = valid_df.select_dtypes(include=[np.number])
-            # Remove non-feature columns
             cols_to_exclude = ['frame_index', 'timestamp', 'video_id', 'face_detected', 'detection_confidence']
             feature_cols = [col for col in numeric_features.columns if col not in cols_to_exclude]
             
@@ -635,11 +548,9 @@ def analyze_video_features(features_df, metadata_df, output_path):
                 plt.savefig(analysis_dir / "video_features_correlation_matrix.png")
                 plt.close()
                 
-                # 5. PCA of features
                 features_for_pca = numeric_features[feature_cols].fillna(0)
                 
-                if len(features_for_pca) > 2:  # Need at least 2 samples for PCA
-                    # Scale the features before PCA
+                if len(features_for_pca) > 2:
                     scaler = StandardScaler()
                     scaled_features = scaler.fit_transform(features_for_pca)
                     
@@ -656,7 +567,6 @@ def analyze_video_features(features_df, metadata_df, output_path):
                     plt.savefig(analysis_dir / "video_PCA_visualization.png")
                     plt.close()
         
-        # Generate a summary text file
         with open(analysis_dir / 'video_feature_analysis.txt', 'w') as f:
             f.write("Video Feature Analysis Summary\n")
             f.write("============================\n\n")
@@ -684,26 +594,12 @@ def analyze_video_features(features_df, metadata_df, output_path):
 
 
 def process_video_dataset(video_dir, output_dir, sample_rate=5, max_videos=None, visualize_subset=True):
-    """Process all videos in directory
-    
-    Args:
-        video_dir: Path to directory containing videos
-        output_dir: Path to save processed features
-        sample_rate: Extract every Nth frame
-        max_videos: Maximum number of videos to process (for testing)
-        visualize_subset: Whether to visualize a subset of videos
-    
-    Returns:
-        features_df: DataFrame containing features
-        metadata_df: DataFrame containing metadata
-    """
     output_dir = Path(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
     video_extensions = ['.mp4', '.avi', '.mov']
     video_files = []
     
-    # Find all video files with the specified extensions
     for ext in video_extensions:
         video_files.extend(list(Path(video_dir).rglob(f"*{ext}")))
 
@@ -755,17 +651,13 @@ def process_video_dataset(video_dir, output_dir, sample_rate=5, max_videos=None,
 
     print(f"Successfully processed {processed_count} out of {len(video_files)} videos")
     
-    # Create DataFrames for features and metadata
     features_df = pd.DataFrame(all_video_features)
     metadata_df = pd.DataFrame(all_metadata)
     
-    # Save to CSV
     if not features_df.empty:
         features_df.to_csv(output_dir / "video_features.csv", index=False)
         metadata_df.to_csv(output_dir / "video_metadata.csv", index=False)
         
-        # Create combined file (like in audio processing)
-        # Only include metadata columns not already in features
         metadata_cols = [col for col in metadata_df.columns if col not in features_df.columns]
         if metadata_cols:
             extended_features = features_df.copy()
@@ -774,43 +666,32 @@ def process_video_dataset(video_dir, output_dir, sample_rate=5, max_videos=None,
                 extended_features[col] = extended_features['video_id'].map(video_to_metadata)
             extended_features.to_csv(output_dir / "video_combined.csv", index=False)
         
-        # Process only frames with detected faces for scaling and modeling
         if 'face_detected' in features_df.columns:
-            # Filter and standardize the features
             face_detected_df = features_df[features_df['face_detected'] == True].copy()
             
             if len(face_detected_df) > 0:
-                # Extract numeric columns for scaling
                 numeric_features = face_detected_df.select_dtypes(include=[np.number])
                 cols_to_exclude = ['frame_index', 'timestamp', 'video_id', 'face_detected', 'detection_confidence']
                 feature_cols = [col for col in numeric_features.columns if col not in cols_to_exclude]
                 
-                # Handle missing values before scaling
                 features_for_scaling = numeric_features[feature_cols].fillna(0)
                 
-                # Scale the features
                 scaler = StandardScaler()
                 scaled_features = scaler.fit_transform(features_for_scaling)
                 
-                # Save the scaler for later use
                 joblib.dump(scaler, output_dir / "video_feature_scaler.pkl")
                 
-                # Create DataFrame with scaled features
                 scaled_df = pd.DataFrame(scaled_features, columns=feature_cols)
                 
-                # Add metadata columns to scaled features
                 meta_cols = ['emotion', 'actor_id', 'gender', 'intensity', 'video_id']
                 for col in meta_cols:
                     if col in face_detected_df.columns:
                         scaled_df[col] = face_detected_df[col].values
                 
-                # Save scaled features
                 scaled_df.to_csv(output_dir / "scaled_video_features.csv", index=False)
                 
-                # Generate analysis of video features
                 analyze_video_features(features_df, metadata_df, output_dir)
                 
-                # Create a balanced dataset for training
                 emotion_groups = scaled_df.groupby('emotion')
                 min_count = emotion_groups.size().min()
                 balanced_df = pd.concat([group.sample(min_count) for name, group in emotion_groups])
@@ -850,7 +731,6 @@ if __name__ == "__main__":
     os.makedirs(speech_output_dir, exist_ok=True)
     os.makedirs(song_output_dir, exist_ok=True)
 
-    # Process speech videos if directory exists
     speech_features, speech_metadata = None, None
     if VIDEO_SPEECH_PATH.exists():
         print(f"Starting video preprocessing for SPEECH videos from {VIDEO_SPEECH_PATH}...")
@@ -866,7 +746,6 @@ if __name__ == "__main__":
     else:
         print("Skipping speech video processing as directory was not found")
 
-    # Process song videos if directory exists
     song_features, song_metadata = None, None
     if VIDEO_SONG_PATH.exists():
         print(f"\nStarting video preprocessing for SONG videos from {VIDEO_SONG_PATH}...")
@@ -882,7 +761,6 @@ if __name__ == "__main__":
     else:
         print("Skipping song video processing as directory was not found")
 
-    # Summary
     speech_count = len(speech_metadata) if speech_metadata is not None else 0
     song_count = len(song_metadata) if song_metadata is not None else 0
     total_videos = speech_count + song_count
@@ -890,27 +768,3 @@ if __name__ == "__main__":
     print(f"\nVideo preprocessing complete! Processed {total_videos} videos:")
     print(f"- Speech videos: {speech_count}")
     print(f"- Song videos: {song_count}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

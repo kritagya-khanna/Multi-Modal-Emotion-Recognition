@@ -4,20 +4,14 @@ import json
 import os
 from pathlib import Path
 
-# Import attention mechanisms
 from models.audio.attention import SelfAttention, BahdanauAttention
 
 def build_cnn_lstm_attention(config):
-    """
-    Very simple CNN for small datasets
-    Only ~200K parameters instead of 5M
-    """
     input_shape = tuple(config['model']['input_shape'])
     num_classes = config['model']['num_classes']
     
     inputs = layers.Input(shape=input_shape)
     
-    # Simple CNN - only 3 layers
     x = layers.Conv2D(32, 3, padding='same')(inputs)
     x = layers.BatchNormalization()(x)
     x = layers.Activation('relu')(x)
@@ -36,7 +30,6 @@ def build_cnn_lstm_attention(config):
     x = layers.GlobalAveragePooling2D()(x)
     x = layers.Dropout(0.4)(x)
     
-    # Simple dense layers
     x = layers.Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0.001))(x)
     x = layers.Dropout(0.5)(x)
     x = layers.Dense(128, activation='relu', kernel_regularizer=regularizers.l2(0.001))(x)
@@ -49,21 +42,10 @@ def build_cnn_lstm_attention(config):
 
 
 def build_audio_model(config_path=None):
-    """
-    Build audio model from config or with default parameters
-    
-    Args:
-        config_path: Path to configuration file
-    
-    Returns:
-        Compiled model
-    """
-    # Load configuration if provided
     if config_path is not None:
         with open(config_path, 'r') as f:
             config = json.load(f)
     else:
-        # Default configuration
         config = {
             "model": {
                 "name": "cnn_lstm_attention",
@@ -86,24 +68,18 @@ def build_audio_model(config_path=None):
 
 
 if __name__ == "__main__":
-    # Test model building
     import numpy as np
     from tensorflow.keras.utils import plot_model
     
-    # Load config
     with open('config/audio_config.json', 'r') as f:
         config = json.load(f)
     
-    # Build model
     model = build_cnn_lstm_attention(config)
     
-    # Print model summary
     model.summary()
     
-    # Visualize model architecture
     plot_model(model, to_file='audio_model_architecture.png', show_shapes=True, show_layer_names=True)
     
-    # Test with random input
     input_shape = config['model']['input_shape']
     batch_size = 32
     test_input = np.random.random((batch_size, *input_shape))
